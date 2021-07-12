@@ -1,0 +1,11 @@
+#! /bin/sh
+
+set -e
+
+CONTAINERS=$(./list-containers)
+
+for container in ${CONTAINERS}
+do
+  docker cp quick-bench-docker/conanfile.txt quick-${container}:/home/builder/
+  docker exec -t quick-${container} ./conan-install
+done

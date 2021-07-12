@@ -1,10 +1,11 @@
 #!/bin/bash
 
 set -e
+# set -x
 
 LOCAL_FILE=`realpath $1`
 
-TARGET_FILE="$BENCH_ROOT/$1"
+TARGET_FILE="$1"
 
 COMPILER=$2
 OPTIM_FLAG=$3
@@ -13,7 +14,7 @@ RECORD_PERF=$5
 CLEAN_CACHE=$6
 LIB_VERSION=$7
 
-if ! [[ $COMPILER == "clang-"?*"."? || $COMPILER == "gcc-"?*"."? ]] ; then
+if ! [[ $COMPILER == "clang-"?* || $COMPILER == "gcc-"?* ]] ; then
     >&2 echo "Unknown compiler"
     exit 1
 fi
@@ -49,10 +50,10 @@ lockfile $LOCK
 INFILE=$TARGET_FILE.cpp
 OUTFILE=$LOCAL_FILE.out
 TARG_OUTFILE=$TARGET_FILE.out
-CIDFILE=$LOCAL_FILE.cid
 LOC_PERFFILE=$LOCAL_FILE.perf
 PERFFILE=$TARGET_FILE.perf
 FUNCFILE=$TARGET_FILE.func
+CONTAINER=quick-$COMPILER
 if [ $CLEAN_CACHE = true ] && [ -f $OUTFILE ]; then
     rm $OUTFILE
     rm -f $LOC_PERFFILE
@@ -75,12 +76,13 @@ else
         ANNOTATE_RECORD="perf record -g"
     fi
     if [[ $LIB_VERSION == llvm ]] && [[ $COMPILER == clang* ]]; then
-        BUILD_COMMAND=build-libcxx
+        WORKDIR=libcxx
     else
-        BUILD_COMMAND=build
+        WORKDIR=libstd
     fi
-    docker run --rm $ANNOTATE -v $INFILE:/home/builder/bench-file.cpp $MEMORY_LIMITS --cidfile=$CIDFILE -v $TARG_OUTFILE:/home/builder/bench.out -t fredtingaud/quick-bench:$COMPILER /bin/bash -c "./$BUILD_COMMAND $OPTIM $VERSION && $ANNOTATE_RECORD ./run $ANNOTATE_CMD"
-    rm $CIDFILE
+    docker cp $INFILE $CONTAINER:/home/builder/$WORKDIR/bench-file.cpp
+    docker exec -t -w /home/builder/$WORKDIR $CONTAINER /bin/bash -c "./build $OPTIM $VERSION && $ANNOTATE_RECORD /home/builder/run $ANNOTATE_CMD"
+    docker cp $CONTAINER:/home/builder/bench.out $TARG_OUTFILE
 fi
 
 rm -f $LOCK

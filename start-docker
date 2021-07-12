@@ -1,0 +1,8 @@
+#!/bin/bash
+
+set -e
+
+COMPILER=$1
+NAME=quick-$1
+
+docker start $NAME 2> /dev/null || docker run --name $NAME -d --cap-add=SYS_PTRACE fredtingaud/quick-bench:$COMPILER sleep infinity

@@ -18,7 +18,9 @@ var upload = multer();
 app.use(bodyParser.json());
 app.use(cors());
 
-libquick.updateAvailableContainersList();
+libquick.updateAvailableContainersList().then(() => {
+    libquick.startContainers();
+});
 
 app.get('/quick-env', upload.array(), function (req, res) {
     res.json(libquick.getEnv());
@@ -49,7 +51,7 @@ app.get('/containers/', upload.array(), function (req, res) {
 
 app.post('/containers/', upload.array(), function (req, res) {
     if (process.env.ALLOW_CONTAINER_DOWNLOAD) {
-        Promise.resolve(docker.loadContainers(req.body.tags))
+        Promise.resolve(libquick.loadContainers(req.body.tags))
             .then(() => libquick.updateAvailableContainersList())
             .then(() => res.json(libquick.getEnv()))
             .catch(e => res.status(500).send('Could not load containers'));
@@ -73,6 +75,17 @@ app.delete('/containers/', upload.array(), function (req, res) {
     }
 });
 
+app.post('/libraries/', upload.array(), function (req, res) {
+    if (process.env.ALLOW_CONTAINER_DOWNLOAD) {
+        Promise.resolve(libquick.installLibraries(req.body.libraries))
+            .catch(e => res.status(500).send('Could not install libraries'));
+    } else {
+        res.status(403).send({
+            message: 'Access Forbidden'
+        });
+    }
+});
+
 app.get('/q/:id', upload.array(), function (req, res) {
     res.sendFile(path.join(__dirname, 'quick-bench-front-end', 'quick-bench', 'build', 'index.html'));
 });
@@ -83,4 +96,4 @@ app.get('/:id', upload.array(), function (req, res) {
 
 app.listen(PORT, function () {
     console.log(`Listening to commands on port ${PORT}`);
-});
+}).setTimeout(libquick.getEnv().timeout * 1000);

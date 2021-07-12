@@ -3,6 +3,7 @@ var sha1 = require('sha1');
 var fs = require('fs');
 const tools = require('./tools');
 const docker = require('./docker');
+const libraries = require('./libraries');
 
 const MAX_CODE_LENGTH = process.env.QB_CODE_LIMIT || 20000;
 const TIMEOUT = parseInt(process.env.QB_TIMEOUT, 10) < 0 ? 0 : (parseInt(process.env.QB_TIMEOUT, 10) || 120);
@@ -33,7 +34,7 @@ static void Noop(benchmark::State& state) {
   for (auto _ : state) benchmark::DoNotOptimize(0);
 }
 BENCHMARK(Noop);
-BENCHMARK_MAIN();`;
+// BENCHMARK_MAIN();`;
 
 var AVAILABLE_CONTAINERS = [];
 
@@ -42,8 +43,23 @@ async function listContainers() {
     await docker.listContainers(AVAILABLE_CONTAINERS);
 }
 
+async function startContainers() {
+    for (const container of AVAILABLE_CONTAINERS) {
+        await docker.startContainer(container);
+    }
+}
+
 function runDockerCommand(fileName, request) {
-    return './run-docker ' + fileName + ' ' + request.options.compiler + ' ' + request.options.optim + ' ' + request.options.cppVersion + ' ' + (request.isAnnotated || false) + ' ' + (request.force || false) + ' ' + (request.options.lib || 'gnu');
+    args = [
+        fileName,
+        request.options.compiler,
+        request.options.optim,
+        request.options.cppVersion,
+        request.isAnnotated || false,
+        request.force || false,
+        request.options.lib || 'gnu'
+    ]
+    return './run-docker ' + args.join(' ');
 }
 
 function optionsToString(request) {
@@ -208,6 +224,14 @@ function getEnv() {
     };
 }
 
+async function loadContainers(targetList) {
+    await docker.loadContainers(targetList, RUNNING_CONTAINERS);
+}
+
+async function installLibraries(list) {
+    await libraries.installLibraries(list);
+}
+
 exports.updateAvailableContainersList = listContainers;
 exports.makeName = makeName;
 exports.wrapCode = wrapCode;
@@ -222,3 +246,6 @@ exports.reload = reload;
 exports.makeRequest = makeRequest;
 exports.getRequestAndResult = getRequestAndResult;
 exports.getEnv = getEnv;
+exports.startContainers = startContainers;
+exports.loadContainers = loadContainers;
+exports.installLibraries = installLibraries;

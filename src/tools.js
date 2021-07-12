@@ -1,4 +1,6 @@
-var fs = require('fs');
+var fs = require('fs')
+  , child_process = require('child_process')
+  ;
 
 function write(fileName, code) {
     return new Promise((resolve, reject) => {
@@ -39,7 +41,20 @@ function decodeName(short) {
     return Buffer.from(short, 'base64').toString('hex');
 }
 
+function exec(command, options, callback) {
+    console.log(`executing: ${command}`);
+    child_process.exec(command, options, (err, stdout, stderr) => {
+        if (err) {
+            console.error(`failed with ${err}`);
+        } else {
+            console.log(`succeeded with stdout:\n${stdout}`);
+        }
+        callback(err, stdout, stderr);
+    });
+}
+
 exports.read = read;
 exports.write =  write;
 exports.encodeName =  encodeName;
 exports.decodeName = decodeName;
+exports.exec = exec;

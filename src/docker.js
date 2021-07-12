@@ -1,25 +1,33 @@
-var exec = require('child_process').exec;
+const { exec } = require('./tools');
 const fetch = require('node-fetch');
 
-const getToken = async () => {
-    const response = await fetch('https://auth.docker.io/token?service=registry.docker.io&scope=repository:fredtingaud/quick-bench:pull');
-    const auth = await response.json();
-    return auth['token'];
-};
+const toConanVersion = version => version.replace("-", "")
 
 const getTags = async () => {
-    const token = await getToken();
-    const response = await fetch('https://registry-1.docker.io/v2/fredtingaud/quick-bench/tags/list', {
-        method: "GET",
-        headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-type": "application/json",
-            "Accept": "application/json",
-            "Accept-Charset": "utf-8"
+    // const token = await getToken();
+    const PAGE_SIZE = process.env.CONTAINER_PAGE_SIZE | 50;
+    const url = `https://hub.docker.com/v2/repositories/conanio?page_size=${PAGE_SIZE}`;
+    let repos = [];
+    for (let i = 1; ; i++) {
+        const page = await fetch(`${url}&page=${i}`).then(res => res.json());
+        repos.push(...page.results);
+
+        if (page.results.length < PAGE_SIZE) {
+            break;
         }
+    }
+    const filtered = repos.flatMap(result => {
+        const match = result.name.match(/^(gcc|clang)(\d+)$/)
+        if (match) {
+            const version = Number.parseInt(match[2]);
+            if (version < 30) {
+                return [`${match[1]}-${version}`];
+            }
+        }
+
+        return [];
     });
-    const json = await response.json();
-    return json['tags'].sort(sortContainers);
+    return filtered.sort(sortContainers);
 };
 
 /*
@@ -65,14 +73,14 @@ function listContainers(target) {
 
 function loadOneContainer(container) {
     return new Promise((resolve, reject) => {
-        return exec('docker pull fredtingaud/quick-bench:' + container, {}, function (err, stdout, stderr) {
+        exec(`docker build --build-arg BASE_IMAGE=conanio/${toConanVersion(container)} -f conanio-dockerfile -t fredtingaud/quick-bench:${container} .`, { cwd: '/quick-bench/quick-bench-docker' }, function (err, stdout, stderr) {
             if (err) {
                 reject(stderr);
             } else {
                 resolve();
             }
         });
-    });
+    }).then(() => startContainer(container));
 }
 
 function deleteOneContainer(container) {
@@ -87,12 +95,24 @@ function deleteOneContainer(container) {
     });
 }
 
-async function loadContainers(targetList) {
-    await Promise.all(targetList.map(t => loadOneContainer(t)));
+async function loadContainers(containersToAdd) {
+    await Promise.all(containersToAdd.map(container => loadOneContainer(container)));
 }
 
 async function deleteContainers(targetList) {
     await Promise.all(targetList.map(t => deleteOneContainer(t)));
+}
+
+function startContainer(container) {
+    return new Promise((resolve, reject) => {
+        exec(`./start-docker ${container}`, {}, function (err, stdout, stderr) {
+            if (err) {
+                reject(stderr);
+            } else {
+                resolve();
+            }
+        });
+    });
 }
 
 exports.listContainers = listContainers;
@@ -100,3 +120,4 @@ exports.readContainersList = readContainersList;
 exports.getTags = getTags;
 exports.loadContainers = loadContainers;
 exports.deleteContainers = deleteContainers;
+exports.startContainer = startContainer;
